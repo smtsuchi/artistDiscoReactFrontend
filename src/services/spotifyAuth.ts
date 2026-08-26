@@ -21,6 +21,13 @@ const SCOPES = [
     'playlist-modify-private',
     'user-follow-modify',
     'user-library-modify',
+    // Read scopes for server-side discovery: the backend builds the taste
+    // profile and genre options from these. Adding them forces a one-time
+    // re-consent for existing users. Partial approval is fine — the backend
+    // degrades per source.
+    'user-top-read',
+    'user-library-read',
+    'user-follow-read',
 ];
 
 const TOKEN_COOKIE = 'spotifyAuthToken';

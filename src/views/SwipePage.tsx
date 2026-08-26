@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useLocation, Navigate } from 'react-router-dom';
+import { useLocation, Navigate, Link } from 'react-router-dom';
 import Cookies from 'js-cookie';
-import { SpotifyArtist, SwipePageLocationState } from '../types';
+import { SpotifyArtist, DeckCard, SwipePageLocationState } from '../types';
 import Footer from '../components/Footer';
 import ArtistCards from '../components/ArtistCards';
 import { categoryApi } from '../services/api';
@@ -9,44 +9,52 @@ import '../css/ArtistCards.css';
 import '../css/Footer.css';
 import '../css/SwipePage.css';
 
+const DECK_SIZE = 20;
+// Refill while there's still a comfortable buffer on screen.
+const REFILL_THRESHOLD = 8;
+
 const SwipePage: React.FC = () => {
   const location = useLocation();
   const state = location.state as SwipePageLocationState | null;
 
   const [artists, setArtists] = useState<SpotifyArtist[]>([]);
-  const [likedCount, setLikedCount] = useState(0);
-  const [liked, setLiked] = useState<string[]>([]);
-  const [used, setUsed] = useState<string[]>([]);
-  const [visited, setVisited] = useState<Set<string>>(new Set());
-  const [childRefs, setChildRefs] = useState<React.RefObject<any>[]>([]);
-  const [buffer, setBuffer] = useState<string[]>([]);
-  // Holds a path rather than a boolean. Everything used to funnel to /login,
-  // but /login calls logout() — so a missing genre or a failed Spotify call
-  // signed the user out instead of just sending them somewhere sensible.
   const [redirect, setRedirect] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [exhausted, setExhausted] = useState(false);
+  const [error, setError] = useState('');
 
   const exButton = useRef<HTMLDivElement>(null);
+  // One ref per artist id. Keyed by id rather than array index so refs survive
+  // the deck being prepended to and spliced.
+  const refsById = useRef<Record<string, React.RefObject<any>>>({});
+  // Mirrors `artists` so callbacks can read the live deck without going stale.
+  const artistsRef = useRef<SpotifyArtist[]>([]);
+  const refilling = useRef(false);
 
+  useEffect(() => {
+    artistsRef.current = artists;
+  }, [artists]);
+
+  const getRef = (id: string): React.RefObject<any> => {
+    if (!refsById.current[id]) {
+      refsById.current[id] = React.createRef();
+    }
+    return refsById.current[id];
+  };
+
+  /**
+   * Top-tracks lookup, kept only as the lazy fallback for cards the deck
+   * endpoint left without a track (see flattenCard).
+   */
   const getTopTracks = async (artistId: string) => {
     try {
       const res = await fetch(
         `https://api.spotify.com/v1/artists/${artistId}/top-tracks?market=US`,
-        {
-          method: 'GET',
-          headers: {
-            Authorization: 'Bearer ' + Cookies.get('spotifyAuthToken'),
-          },
-        }
+        { method: 'GET', headers: { Authorization: 'Bearer ' + Cookies.get('spotifyAuthToken') } }
       );
       const data = await res.json();
-
       if (!data.tracks || data.tracks.length === 0) {
-        return {
-          preview_url: null,
-          track_id: null,
-          track_name: null,
-          track_thumbnail: null,
-        };
+        return { preview_url: null, track_id: null, track_name: null, track_thumbnail: null };
       }
 
       let trackNum = 0;
@@ -59,271 +67,144 @@ const SwipePage: React.FC = () => {
       }
 
       const myTrack = data.tracks[trackNum];
-      const trackThumbnail =
-        myTrack.album.images && myTrack.album.images[0]
-          ? myTrack.album.images[0].url
-          : null;
-
       return {
         preview_url: myTrack.preview_url,
         track_id: myTrack.id,
         track_name: myTrack.name,
-        track_thumbnail: trackThumbnail,
+        track_thumbnail: myTrack.album?.images?.[0]?.url ?? null,
       };
-    } catch (error) {
-      console.error('Error getting top tracks:', error);
-      return {
-        preview_url: null,
-        track_id: null,
-        track_name: null,
-        track_thumbnail: null,
-      };
+    } catch (err) {
+      console.error('Error getting top tracks:', err);
+      return { preview_url: null, track_id: null, track_name: null, track_thumbnail: null };
     }
   };
 
-  const getRelatedArtists = useCallback(
-    async (artistId: string, remainingDeckLength?: number) => {
-      const token = Cookies.get('spotifyAuthToken');
-      if (!token) {
-        // Genuinely unauthenticated — signing out is correct here.
-        setRedirect('/login');
-        return;
-      }
-      if (!state) {
-        setRedirect('/genreselect');
-        return;
-      }
+  /** Deck cards nest track data; the card component reads it flattened. */
+  const flattenCard = (card: DeckCard): SpotifyArtist => ({
+    ...card,
+    track_id: card.track?.id,
+    track_name: card.track?.name ?? undefined,
+    track_preview: card.track?.preview_url ?? undefined,
+    track_thumbnail: card.track?.thumbnail ?? null,
+  });
+
+  /**
+   * The deck endpoint only populates `track` for the first 10 cards — fetching
+   * 20 sets of top-tracks up front is what made the old flow slow. Those 10 are
+   * the ones shown first, so the rest can be filled in while the user swipes.
+   */
+  const hydrateMissingTracks = useCallback(async (cards: SpotifyArtist[]) => {
+    for (const card of cards) {
+      if (card.track_name) continue;
+      const t = await getTopTracks(card.id);
+      setArtists((prev) =>
+        prev.map((a) =>
+          a.id === card.id
+            ? {
+                ...a,
+                track_preview: t.preview_url ?? undefined,
+                track_id: t.track_id ?? undefined,
+                track_name: t.track_name ?? undefined,
+                track_thumbnail: t.track_thumbnail,
+              }
+            : a
+        )
+      );
+    }
+  }, []);
+
+  const loadDeck = useCallback(
+    async (replace: boolean) => {
+      if (!state || refilling.current) return;
+      refilling.current = true;
+      setError('');
 
       try {
-        const res = await fetch(
-          `https://api.spotify.com/v1/artists/${artistId}/related-artists`,
-          {
-            method: 'GET',
-            headers: {
-              Authorization: 'Bearer ' + token,
-            },
-          }
-        );
-        const data = await res.json();
-
-        if (!data.artists || data.artists.length === 0) return 'empty';
-
-        // Capture the current visited state for filtering
-        const visitedSnapshot = await new Promise<Set<string>>((resolve) => {
-          setVisited((current) => {
-            resolve(current);
-            return current;
-          });
+        const data = await categoryApi.buildDeck(state.current_user_id, state.category_name, {
+          size: DECK_SIZE,
+          exclude_ids: artistsRef.current.map((a) => a.id),
+          // adventurousness deliberately omitted so the user's stored setting wins.
         });
 
-        // Pre-filter against visited and do deduplication
-        const checklist = new Set(data.artists.map((a: any) => a.id));
-        const preFilteredData = data.artists
-          .filter((artist: any) => {
-            if (checklist.has(artist.id)) {
-              checklist.delete(artist.id);
-              return true;
-            }
-            return false;
-          })
-          .filter(
-            (artist: any) =>
-              !visitedSnapshot.has(artist.id) &&
-              artist.images.length > 0
-          );
-
-        // Fetch track details for all pre-filtered artists
-        for (let i = 0; i < preFilteredData.length; i++) {
-          const trackDetails = await getTopTracks(preFilteredData[i].id);
-          preFilteredData[i].track_preview = trackDetails.preview_url;
-          preFilteredData[i].track_id = trackDetails.track_id;
-          preFilteredData[i].track_name = trackDetails.track_name;
-          preFilteredData[i].track_thumbnail = trackDetails.track_thumbnail;
+        if (data.meta.exhausted && data.deck.length === 0) {
+          setExhausted(true);
+          return;
         }
 
-        // Capture current used state
-        const usedSnapshot = await new Promise<string[]>((resolve) => {
-          setUsed((current) => {
-            resolve(current);
-            return current;
-          });
-        });
+        // The server returns best-first, but the card stack renders the LAST
+        // array element on top — so reverse, or the user silently sees the
+        // worst recommendations first.
+        const fresh = data.deck.map(flattenCard).reverse();
 
-        // Use functional update to merge with the most current state
-        let finalArtistsLength = 0;
-        setArtists((currentArtists) => {
-          // When remainingDeckLength is provided, keep only that many current artists
-          // Otherwise keep all current artists
-          const currentForMerge = remainingDeckLength !== undefined
-            ? currentArtists.slice(0, remainingDeckLength)
-            : currentArtists;
-
-          // Filter out any artists that are already in the current deck
-          const currentIds = new Set(currentForMerge.map(a => a.id));
-          const filteredData = preFilteredData.filter(
-            (artist: any) => !currentIds.has(artist.id)
-          );
-
-          // New artists go to the bottom of the visual stack (beginning of array)
-          // Since the last card in array appears on top, new cards go at the start
-          const updatedArtists = [...filteredData, ...currentForMerge];
-          finalArtistsLength = updatedArtists.length;
-
-          // Update backend with the new state
-          categoryApi.updateCategory(
-            state.current_user_id,
-            state.category_name,
-            {
-              artists: updatedArtists,
-              used: [...usedSnapshot, artistId],
-              child_refs: Array(updatedArtists.length).fill(0).map(() => React.createRef()),
-            }
-          );
-
-          return updatedArtists;
-        });
-
-        setChildRefs(() => {
-          // Create refs matching the final artists length
-          return Array(finalArtistsLength)
-            .fill(0)
-            .map(() => React.createRef());
-        });
-
-        setUsed((prev) => [...prev, artistId]);
-
-        return 'done';
-      } catch (error) {
-        // A Spotify or backend failure is not an auth failure. Note that
-        // /artists/{id}/related-artists was restricted by Spotify in Nov 2024
-        // and returns 403 for apps in development mode, which used to land
-        // here and sign the user out.
-        console.error('Error getting related artists:', error);
-        setRedirect('/genreselect');
+        setArtists((prev) => (replace ? fresh : [...fresh, ...prev]));
+        hydrateMissingTracks(fresh);
+      } catch (err) {
+        console.error('Error building deck:', err);
+        setError(err instanceof Error ? err.message : 'Could not load more artists.');
+      } finally {
+        refilling.current = false;
+        setLoading(false);
       }
     },
-    [visited, used, state]
+    [state, hydrateMissingTracks]
   );
 
   useEffect(() => {
-    const initializeArtists = async () => {
-      if (!state) {
-        // No genre chosen yet — go pick one, don't sign the user out.
-        setRedirect('/genreselect');
-        return;
-      }
-
-      const { category_name, first_time, artist_id, current_user_id } = state;
-
-      if (first_time) {
-        let count = 0;
-        while (count < used.length && used.includes(artist_id[count])) {
-          count++;
-        }
-        getRelatedArtists(artist_id[count]);
-        setBuffer(artist_id);
-      } else {
-        // Load from database
-        try {
-          const getData = await categoryApi.getCategory(current_user_id, category_name);
-
-          if (getData.success && getData.data) {
-            // The backend returns data directly, not wrapped in myCategory
-            const data = getData.data as any;
-
-            // Fetch track details for cached artists if they don't have them
-            const artists = data.artists || [];
-            const artistsWithTracks = await Promise.all(
-              artists.map(async (artist: any) => {
-                // Check if artist already has track preview data
-                if (artist.track_preview) {
-                  return artist;
-                }
-                // Fetch track details for this artist
-                const trackDetails = await getTopTracks(artist.id);
-                return {
-                  ...artist,
-                  track_preview: trackDetails.preview_url,
-                  track_id: trackDetails.track_id,
-                  track_name: trackDetails.track_name,
-                  track_thumbnail: trackDetails.track_thumbnail,
-                };
-              })
-            );
-
-            // Create fresh refs for all artists
-            const newChildRefs = Array(artistsWithTracks.length)
-              .fill(0)
-              .map(() => React.createRef());
-
-            setArtists(artistsWithTracks);
-            setBuffer(data.buffer || []);
-            setUsed(data.used || []);
-            setChildRefs(newChildRefs);
-            setLiked(data.liked || []);
-            setLikedCount(data.liked_count || 0);
-            setVisited(new Set(data.visited || []));
-          }
-        } catch (error) {
-          console.error('Error loading category data:', error);
-        }
-      }
-    };
-
-    initializeArtists();
+    if (!state) {
+      // No genre chosen yet — go pick one, don't sign the user out.
+      setRedirect('/genreselect');
+      return;
+    }
+    // One call replaces the old first_time / resume split: the backend already
+    // knows everything this user has liked, passed or seen.
+    loadDeck(true);
   }, []);
 
   const updateLiked = async (artistId: string) => {
     if (!state) return;
-
     try {
-      const result = await categoryApi.addLikedArtist(
-        state.current_user_id,
-        state.category_name,
-        artistId
-      );
+      await categoryApi.addLikedArtist(state.current_user_id, state.category_name, artistId);
+    } catch (err) {
+      console.error('Error updating liked:', err);
+    }
+  };
 
-      if (!result.success) {
-        console.error('Error updating liked:', result.error);
-      }
-    } catch (error) {
-      console.error('Error updating liked:', error);
+  const recordPass = async (artistId: string) => {
+    if (!state) return;
+    try {
+      await categoryApi.recordPass(state.current_user_id, state.category_name, artistId);
+    } catch (err) {
+      console.error('Error recording pass:', err);
     }
   };
 
   const follow = (artistId: string) => {
-    fetch(
-      `https://api.spotify.com/v1/me/following?type=artist&ids=${artistId}`,
-      {
-        method: 'PUT',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + Cookies.get('spotifyAuthToken'),
-        },
-      }
-    );
+    fetch(`https://api.spotify.com/v1/me/following?type=artist&ids=${artistId}`, {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + Cookies.get('spotifyAuthToken'),
+      },
+    });
   };
 
   const fav = (trackId: string | null | undefined) => {
-    if (trackId) {
-      fetch(`https://api.spotify.com/v1/me/tracks?ids=${trackId}`, {
-        method: 'PUT',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + Cookies.get('spotifyAuthToken'),
-        },
-      });
-    }
+    if (!trackId) return;
+    fetch(`https://api.spotify.com/v1/me/tracks?ids=${trackId}`, {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + Cookies.get('spotifyAuthToken'),
+      },
+    });
   };
 
   const atp = (trackId: string | null | undefined) => {
     if (!state || !trackId) return;
-
-    const playlistId = state.my_playlist;
     fetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}/tracks?uris=spotify%3Atrack%3A${trackId}`,
+      `https://api.spotify.com/v1/playlists/${state.my_playlist}/tracks?uris=spotify%3Atrack%3A${trackId}`,
       {
         method: 'POST',
         headers: {
@@ -336,55 +217,27 @@ const SwipePage: React.FC = () => {
   };
 
   const onSwipe = (direction: string, artistObject: SpotifyArtist) => {
-    // Pause all audio
     const sounds = document.getElementsByTagName('audio');
     for (let i = 0; i < sounds.length; i++) sounds[i].pause();
 
-    if (direction === 'right' && state) {
-      setLiked((prev) => [...prev, artistObject.id]);
+    if (!state) return;
+
+    if (direction === 'right') {
       updateLiked(artistObject.id);
       if (state.atp) atp(artistObject.track_id);
       if (state.fav) fav(artistObject.track_id);
       if (state.follow) follow(artistObject.id);
+    } else if (direction === 'left') {
+      // Previously a left swipe recorded nothing, so the recommender could only
+      // ever learn what a user liked, never what they rejected.
+      recordPass(artistObject.id);
     }
   };
 
   const swipe = (direction: string) => {
-    const cardsLeft = artists;
-    if (cardsLeft.length) {
-      let indexToBeRemoved = cardsLeft.length - 1;
-      while (
-        indexToBeRemoved > -1 &&
-        (!childRefs[indexToBeRemoved] || !childRefs[indexToBeRemoved].current)
-      ) {
-        indexToBeRemoved -= 1;
-      }
-      if (indexToBeRemoved >= 0 && childRefs[indexToBeRemoved].current) {
-        childRefs[indexToBeRemoved].current.swipe(direction);
-      }
-    }
-  };
-
-  const updateAfterLeaveScreen = async (
-    visitedSet: Set<string>,
-    artistsList: SpotifyArtist[]
-  ) => {
-    if (!state) return;
-
-    try {
-      const visitedArr = Array.from(visitedSet);
-      const result = await categoryApi.updateOnLeave(
-        state.current_user_id,
-        state.category_name,
-        { visited: visitedArr, artists: artistsList }
-      );
-
-      if (!result.success) {
-        console.error('Error updating after leave screen:', result.error);
-      }
-    } catch (error) {
-      console.error('Error updating after leave screen:', error);
-    }
+    const top = artistsRef.current[artistsRef.current.length - 1];
+    if (!top) return;
+    refsById.current[top.id]?.current?.swipe(direction);
   };
 
   const onCardLeftScreen = (_myName: string, myIdentifier: string) => {
@@ -392,40 +245,63 @@ const SwipePage: React.FC = () => {
       exButton.current.removeAttribute('disabled');
     }
 
-    const newVisited = new Set(visited).add(myIdentifier);
-    const newArtists = artists.filter((artist) => artist.id !== myIdentifier);
-    const deckElement = document.getElementById('deck');
-    const deckLength = deckElement
-      ? deckElement.getElementsByClassName('individual-card').length
-      : 0;
+    delete refsById.current[myIdentifier];
 
-    setVisited(newVisited);
-    setArtists(newArtists);
-    updateAfterLeaveScreen(newVisited, newArtists);
-
-    if (deckLength <= 11) {
-      let count = likedCount;
-      while (used.includes(liked[count])) {
-        count++;
+    setArtists((prev) => {
+      const next = prev.filter((artist) => artist.id !== myIdentifier);
+      // Read the remaining count from state rather than counting DOM nodes.
+      if (next.length <= REFILL_THRESHOLD && !exhausted) {
+        loadDeck(false);
       }
-      setLikedCount(count);
-      setUsed((prev) => [...prev, ...liked.slice(0, count)]);
-
-      if (liked[count]) {
-        getRelatedArtists(liked[count], deckLength - 1);
-      } else {
-        for (const playlistArtist of buffer) {
-          if (!used.includes(playlistArtist)) {
-            getRelatedArtists(playlistArtist);
-            break;
-          }
-        }
-      }
-    }
+      return next;
+    });
   };
 
   if (redirect) {
     return <Navigate to={redirect} replace />;
+  }
+
+  if (loading) {
+    return (
+      <div className="swipePage">
+        <div className="media-container">
+          <div className="loading-gif"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (exhausted && artists.length === 0) {
+    return (
+      <div className="swipePage">
+        <div className="media-container">
+          <div className="deck-message">
+            <h2>That's everything</h2>
+            <p>
+              You've seen everything we can find for this genre. Try another, or turn
+              adventurousness up in settings to reach further out.
+            </p>
+            <Link className="button" to="/genreselect">Pick another genre</Link>
+            <Link className="button" to="/settings">Settings</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && artists.length === 0) {
+    return (
+      <div className="swipePage">
+        <div className="media-container">
+          <div className="deck-message">
+            <h2>Couldn't load artists</h2>
+            <p>{error}</p>
+            <button className="button" onClick={() => loadDeck(true)}>Try again</button>
+            <Link className="button" to="/genreselect">Pick another genre</Link>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -434,10 +310,10 @@ const SwipePage: React.FC = () => {
         <div className="loading-gif"></div>
       </div>
       <div id="deck" className="artistCards__cardContainer">
-        {artists.map((artist, i) => (
+        {artists.map((artist) => (
           <ArtistCards
             key={artist.id}
-            childRef={childRefs[i]}
+            childRef={getRef(artist.id)}
             artist={artist}
             onSwipe={onSwipe}
             onCardLeftScreen={onCardLeftScreen}

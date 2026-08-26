@@ -1,136 +1,109 @@
-import React, { FormEvent } from 'react';
+import React, { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Cookies from 'js-cookie';
 import { useAuth } from '../contexts/AuthContext';
 import { useUser } from '../contexts/UserContext';
-import { categoryApi } from '../services/api';
+import { categoryApi, userApi } from '../services/api';
+import { GenreOption } from '../types';
 import '../css/GenreSelect.css';
-
-const GENRES = [
-  { id: '37i9dQZF1DX0XUsuxWHRQd', name: 'Hip Hop' },
-  { id: '37i9dQZF1DXcBWIGoYBM5M', name: 'Pop' },
-  { id: '37i9dQZF1DWXRqgorJj26U', name: 'Rock' },
-  { id: '37i9dQZF1DX9tPFwDMOaN1', name: 'K-Pop' },
-  { id: '37i9dQZF1DX4dyzvuaRJ0n', name: 'Electronic Dance Music' },
-  { id: '37i9dQZF1DX10zKzsJ2jva', name: 'Latin Trap' },
-  { id: '37i9dQZF1DX1lVhptIYRda', name: 'Country' },
-  { id: '37i9dQZF1DX4SBhb3fqCJd', name: 'Contemporary R&B' },
-  { id: '37i9dQZF1DX2Nc3B70tvx0', name: 'Indie Rock' },
-  { id: '37i9dQZF1DX0KpeLFwA3tO', name: 'Punk Rock' },
-  { id: '37i9dQZF1DXa8NOEUWPn9W', name: 'House Music' },
-  { id: '37i9dQZF1DX82GYcclJ3Ug', name: 'Alternative Rock' },
-  { id: '37i9dQZF1DWTx0xog3gN3q', name: 'Soul' },
-  { id: '37i9dQZF1DWY7IeIP1cdjF', name: 'Reggaeton' },
-  { id: '37i9dQZF1DWWQRwui0ExPn', name: 'Lo-Fi Music' },
-  { id: '37i9dQZF1DWZgauS5j6pMv', name: 'Funk' },
-  { id: '37i9dQZF1DX1MUPbVKMgJE', name: 'Disco' },
-  { id: '37i9dQZF1DWWEJlAGA9gs0', name: 'Classical Music' },
-  { id: '37i9dQZF1DWTR4ZOXTfd9K', name: 'Jazz' },
-  { id: '37i9dQZF1DX7Qo2zphj7u3', name: 'Latin Music' },
-  { id: '37i9dQZF1DWTcqUzwhNmKv', name: 'Metal' },
-];
 
 const GenreSelect: React.FC = () => {
   const { currentUser, isAuthenticated, logout } = useAuth();
   const { userId, categoryNames, settings, myPlaylist, addCategory, setCurrentPlaylist } = useUser();
   const navigate = useNavigate();
 
-  const generateArtists = async (playlistId: string, categoryName: string) => {
-    if (categoryNames.includes(categoryName)) {
-      // Load saved database data
-      try {
-        const result = await categoryApi.getCategory(userId, categoryName);
+  const [options, setOptions] = useState<GenreOption[]>([]);
+  const [source, setSource] = useState<'library' | 'fallback' | null>(null);
+  const [libraryArtists, setLibraryArtists] = useState(0);
+  const [loadingOptions, setLoadingOptions] = useState(true);
+  const [optionsError, setOptionsError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
-        // Handle multiple response formats
-        let categoryData = null;
-
-        if (result.success && result.data) {
-          // Check if data.myCategory exists (wrapped format)
-          if ((result.data as any).myCategory) {
-            categoryData = (result.data as any).myCategory;
-          }
-          // Check if data.buffer exists directly (unwrapped format)
-          else if ((result.data as any).buffer) {
-            categoryData = result.data;
-          }
-        }
-        // Old format: { myCategory: {...} } directly in result
-        else if ((result as any).myCategory) {
-          categoryData = (result as any).myCategory;
-        }
-        // Very old format: buffer directly in result
-        else if ((result as any).buffer) {
-          categoryData = result;
-        }
-
-        if (categoryData && (categoryData as any).buffer) {
-          setCurrentPlaylist(categoryName);
-          return { buffer: (categoryData as any).buffer, first_time: false };
-        } else {
-          console.error('Error loading category - no buffer found:', result);
-          return null;
-        }
-      } catch (error) {
-        console.error('Error loading category - exception:', error);
-        return null;
-      }
-    } else {
-      // Create new category from Spotify API
-      const token = Cookies.get('spotifyAuthToken');
-      if (!token) {
-        navigate('/callback');
-        return null;
-      }
-
-      try {
-        const res = await fetch(
-          `https://api.spotify.com/v1/playlists/${playlistId}/tracks?market=US`,
-          {
-            method: 'GET',
-            headers: {
-              Accept: 'application/json',
-              'Content-Type': 'application/json',
-              Authorization: 'Bearer ' + token,
-            },
-          }
-        );
-        const data = await res.json();
-        const buffer = data.items.map((item: any) => item.track.artists[0].id);
-
-        // Save to backend
-        const result = await categoryApi.createCategory(userId, categoryName, buffer);
-
-        if (result.success) {
-          addCategory(categoryName);
-          setCurrentPlaylist(categoryName);
-          return { buffer, first_time: true };
-        } else {
-          console.error('Error creating category:', result.error);
-          return null;
-        }
-      } catch (error) {
-        console.error('Error creating category:', error);
-        return null;
-      }
+  const loadOptions = async () => {
+    if (!userId) return;
+    setLoadingOptions(true);
+    setOptionsError('');
+    try {
+      const data = await userApi.getGenreOptions(userId);
+      setOptions(data.options || []);
+      setSource(data.source);
+      setLibraryArtists(data.library_artists || 0);
+    } catch (err) {
+      console.error('Error loading genre options:', err);
+      setOptionsError(err instanceof Error ? err.message : 'Could not load genres.');
+    } finally {
+      setLoadingOptions(false);
     }
+  };
+
+  useEffect(() => {
+    loadOptions();
+  }, [userId]);
+
+  /**
+   * A brand-new account has too thin a library to profile, so the backend
+   * returns generic options with no seeds — and a category with no seeds comes
+   * back exhausted. Seed from the user's top artists instead, which the new
+   * user-top-read scope makes available.
+   */
+  const seedsFromTopArtists = async (): Promise<string[]> => {
+    try {
+      const res = await fetch('https://api.spotify.com/v1/me/top/artists?limit=20', {
+        headers: { Authorization: 'Bearer ' + Cookies.get('spotifyAuthToken') },
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.items || []).map((a: any) => a.id);
+    } catch {
+      return [];
+    }
+  };
+
+  const prepareCategory = async (option: GenreOption): Promise<boolean> => {
+    const categoryName = option.genre;
+
+    if (categoryNames.includes(categoryName)) {
+      // Already exists. The deck is built server-side from the user's history,
+      // so there's no buffer to read back — but opening the category is what
+      // makes the backend record it as the current playlist, so still call it.
+      await categoryApi.getCategory(userId, categoryName);
+      setCurrentPlaylist(categoryName);
+      return true;
+    }
+
+    let seeds = option.seed_artist_ids || [];
+    if (seeds.length === 0) {
+      seeds = await seedsFromTopArtists();
+    }
+
+    const result = await categoryApi.createCategory(userId, categoryName, seeds);
+    if (!result.success) {
+      setSubmitError(result.error || 'Could not create that category.');
+      return false;
+    }
+
+    addCategory(categoryName);
+    setCurrentPlaylist(categoryName);
+    return true;
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
     const form = e.target as HTMLFormElement;
     const select = form.elements.namedItem('playlist') as HTMLSelectElement;
-    const playlistId = select.value;
-    const categoryName = select.options[select.selectedIndex].text;
+    const chosen = options.find((o) => o.genre === select.value);
+    if (!chosen) return;
 
-    const result = await generateArtists(playlistId, categoryName);
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const ok = await prepareCategory(chosen);
+      if (!ok) return;
 
-    if (result) {
       navigate('/', {
         state: {
-          artist_id: result.buffer,
-          first_time: result.first_time,
-          category_name: categoryName,
+          category_name: chosen.genre,
           current_user_id: userId,
           atp: settings.add_to_playlist_on_like,
           fav: settings.fav_on_like,
@@ -138,6 +111,11 @@ const GenreSelect: React.FC = () => {
           my_playlist: myPlaylist,
         },
       });
+    } catch (err) {
+      console.error('Error starting category:', err);
+      setSubmitError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -148,6 +126,11 @@ const GenreSelect: React.FC = () => {
   const signedIn = isAuthenticated;
   const profileLoaded = !!currentUser;
 
+  const yours = options.filter((o) => o.kind === 'library');
+  const stretch = options.filter((o) => o.kind === 'stretch');
+  const generic = options.filter((o) => o.kind === 'fallback');
+  const ready = !loadingOptions && options.length > 0;
+
   return (
     <div className="main">
       <div className="text">
@@ -155,24 +138,59 @@ const GenreSelect: React.FC = () => {
       </div>
 
       <div className="genreForm">
-        <form id="selectgenre" onSubmit={handleSubmit}>
-          <select
-            className="form-control"
-            name="playlist"
-            id="genres"
-          >
-            {GENRES.map((genre) => (
-              <option key={genre.id} value={genre.id}>
-                {genre.name}
-              </option>
-            ))}
-          </select>
-          <div className="submit">
-            <button type="submit" form="selectgenre" className="button">
-              Submit
-            </button>
+        {loadingOptions && <h3>Reading your library…</h3>}
+
+        {optionsError && (
+          <div className="genre-problem">
+            <h3>Couldn't load your genres.</h3>
+            <div className="auth-detail">{optionsError}</div>
+            <button className="button" onClick={loadOptions}>Retry</button>
           </div>
-        </form>
+        )}
+
+        {ready && (
+          <form id="selectgenre" onSubmit={handleSubmit}>
+            <select className="form-control" name="playlist" id="genres">
+              {yours.length > 0 && (
+                <optgroup label="Your genres">
+                  {yours.map((o) => (
+                    <option key={o.genre} value={o.genre}>{o.label}</option>
+                  ))}
+                </optgroup>
+              )}
+              {stretch.length > 0 && (
+                <optgroup label="Explore">
+                  {stretch.map((o) => (
+                    <option key={o.genre} value={o.genre}>{o.label}</option>
+                  ))}
+                </optgroup>
+              )}
+              {generic.length > 0 && (
+                <optgroup label="Popular genres">
+                  {generic.map((o) => (
+                    <option key={o.genre} value={o.genre}>{o.label}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <div className="submit">
+              <button type="submit" form="selectgenre" className="button" disabled={submitting}>
+                {submitting ? 'Starting…' : 'Submit'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {source === 'library' && libraryArtists > 0 && (
+          <div className="auth-detail">Built from {libraryArtists} artists in your library.</div>
+        )}
+        {source === 'fallback' && (
+          <div className="auth-detail">
+            Not enough listening history yet to personalise these — we'll use your top
+            artists to get started.
+          </div>
+        )}
+        {submitError && <div className="auth-detail error">{submitError}</div>}
       </div>
 
       <div className="loggedin">
@@ -183,9 +201,7 @@ const GenreSelect: React.FC = () => {
         ) : (
           <>
             <h3>Loading your profile…</h3>
-            <button className="button" onClick={logout}>
-              Sign out
-            </button>
+            <button className="button" onClick={logout}>Sign out</button>
           </>
         )}
       </div>

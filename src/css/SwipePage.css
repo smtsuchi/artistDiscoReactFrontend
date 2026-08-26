@@ -38,3 +38,27 @@
     }
     .loading-gif {border-radius: 20px;}
 }
+/* End-of-deck and error states. Previously the deck just emptied to zero cards
+   with no message and no way forward. */
+.deck-message {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 10px;
+    height: 100%;
+    width: 100%;
+    padding: 24px;
+    box-sizing: border-box;
+    text-align: center;
+    color: white;
+    background-color: rgba(0, 0, 0, .75);
+}
+.deck-message > p {
+    font-size: 14px;
+    opacity: .8;
+    max-width: 34ch;
+}
+.deck-message .button {
+    display: inline-block;
+    text-decoration: none;
+}
