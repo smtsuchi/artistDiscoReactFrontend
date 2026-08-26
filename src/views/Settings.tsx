@@ -135,28 +135,28 @@ const Settings: React.FC = () => {
               <span className="slider round"></span>
             </label>
           </div>
-        </form>
 
-        <div className="adventurousness">
-          <h3 className="border-gradient-purple">Adventurousness</h3>
-          <input
-            type="range"
-            id="adventurousness"
-            min={0}
-            max={1}
-            step={0.1}
-            value={adventurousness}
-            onChange={(e) => setAdventurousness(parseFloat(e.target.value))}
-          />
-          <div className="adventurousness-scale">
-            <span>Familiar</span>
-            <span>{Math.round(adventurousness * 100)}%</span>
-            <span>Obscure</span>
+          {/* Inside the grid, not after it: .my-form is height:100% of the
+              card, so a sibling below it falls outside the visible area on
+              mobile. This occupies the previously empty bottom row. */}
+          <div className="adventurousness">
+            <h3>Adventurousness</h3>
+            <input
+              type="range"
+              id="adventurousness"
+              min={0}
+              max={1}
+              step={0.1}
+              value={adventurousness}
+              onChange={(e) => setAdventurousness(parseFloat(e.target.value))}
+            />
+            <div className="adventurousness-scale">
+              <span>Familiar</span>
+              <span>{Math.round(adventurousness * 100)}%</span>
+              <span>Obscure</span>
+            </div>
           </div>
-          <p className="adventurousness-hint">
-            How far outside your usual taste new artists are drawn from.
-          </p>
-        </div>
+        </form>
       </div>
     </div>
   );

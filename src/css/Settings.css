@@ -4,7 +4,9 @@ h3 {
 .my-form {
     display: grid;
     grid-template-columns: 15% 60% 10% 15%;
-    grid-template-rows: 13% 10% 5% 11% 11% 11% 29%;
+    /* Last row was empty filler; it now holds the adventurousness control.
+       The top spacer gives up a little height to make room. */
+    grid-template-rows: 8% 10% 5% 11% 11% 11% 34%;
     grid-row-gap: 2%;
     grid-template-areas:
         '.  .               .           .'
@@ -13,7 +15,7 @@ h3 {
         '.  atp-txt         atp         .'
         '.  fav-txt         fav         .'
         '.  fol-txt         fol         .'
-        '.  .           .               .';
+        '.  adv             adv         .';
     width: 100%;
     height: 100%;
 }
@@ -113,26 +115,29 @@ label {
     border-radius: 50%;
   }
 /* Adventurousness slider — controls how far outside the user's profile the
-   backend reaches when scoring a deck. */
+   backend reaches when scoring a deck. Sits in the grid's bottom row so it
+   stays inside the card on mobile. */
 .adventurousness {
-    padding: 16px 20px 24px;
+    grid-area: adv;
+    align-self: start;
+    min-width: 0;
     color: white;
 }
 .adventurousness > h3 {
-    margin-bottom: 12px;
+    margin: 0 0 10px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #414141;
 }
 .adventurousness > input[type="range"] {
+    display: block;
     width: 100%;
-    accent-color: #1db954;
+    margin: 0;
+    accent-color: #1ed760;
 }
 .adventurousness-scale {
     display: flex;
     justify-content: space-between;
+    margin-top: 6px;
     font-size: 12px;
     opacity: .75;
-}
-.adventurousness-hint {
-    margin-top: 10px;
-    font-size: 12px;
-    opacity: .6;
 }
