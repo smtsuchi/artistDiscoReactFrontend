@@ -26,6 +26,45 @@
     height: 100%;
     width: 100%;
 }
+.spotify-login-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 28px;
+    border: none;
+    border-radius: 25px;
+    background-color: #1db954;
+    color: white;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.spotify-login-btn:hover {
+    background-color: #1ed760;
+}
+.spotify-login-btn:disabled {
+    opacity: .6;
+    cursor: default;
+}
+.spotify-login-logo {
+    height: 22px;
+    width: 22px;
+    fill: white;
+}
+.auth-status {
+    margin-top: 16px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, .6);
+    color: white;
+    font-size: 14px;
+    text-align: center;
+}
+.auth-status.error {
+    color: #ff6b6b;
+}
 .btn {
     height: 40px;
     align-self: center;

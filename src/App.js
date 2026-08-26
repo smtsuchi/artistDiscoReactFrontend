@@ -1,8 +1,6 @@
 import React, { Component } from "react";
 import { SpotifyApiContext } from 'react-spotify-api';
 import Cookies from 'js-cookie';
-import { SpotifyAuth, Scopes } from 'react-spotify-auth';
-import 'react-spotify-auth/dist/index.css';
 import { Switch, Route } from "react-router-dom";
 import Header from "./components/Header";
 import Callback from "./components/Callback";
@@ -12,10 +10,10 @@ import SwipePage from "./views/SwipePage";
 import Settings from "./views/Settings"
 import IndividualCard from "./views/IndividualCard";
 import Login from "./components/Login";
+import SpotifyLoginButton from "./components/SpotifyLoginButton";
+import { completeLogin, hasAuthResponse, canRefresh, refreshToken, logout } from "./spotifyAuth";
 
 const REACT_APP_BACKEND_URL = process.env.REACT_APP_BACKEND_URL
-const REACT_APP_SPOTIFIY_CLIENT_ID = process.env.REACT_APP_SPOTIFIY_CLIENT_ID
-const REACT_APP_SPOTIFIY_CLIENT_SECRET = process.env.REACT_APP_SPOTIFIY_CLIENT_SECRET
 
 export default class App extends Component {
   constructor() {
@@ -39,9 +37,14 @@ export default class App extends Component {
         current_user_id: '',
         category_names: [],
         settings: {current_playlist: null, add_to_playlist_on_like: true, follow_on_like: true, fav_on_like: true},
-        my_playlist: ''
+        my_playlist: '',
+        // Spotify has redirected us back with a ?code=, or we have a refresh
+        // token to spend — either way, hold off rendering until it resolves.
+        auth_pending: hasAuthResponse() || (!Cookies.get('spotifyAuthToken') && canRefresh()),
+        auth_error: ''
       }
     // }
+    this.returning_from_spotify = hasAuthResponse();
     this.getCurrentUser = this.getCurrentUser.bind(this);
     this.getCurrentUserData = this.getCurrentUserData.bind(this);
     this.generateArtists = this.generateArtists.bind(this);
@@ -50,8 +53,26 @@ export default class App extends Component {
     this.checkLogin = this.checkLogin.bind(this);
   }
 
+  async componentDidMount() {
+    if (!this.state.auth_pending) { return }
+    try {
+      const token = this.returning_from_spotify ? await completeLogin() : await refreshToken();
+      this.setState({access_token: token, auth_pending: false})
+    } catch (err) {
+      logout();
+      this.setState({auth_pending: false, auth_error: err.message})
+    }
+  }
+
   reset(){
-    this.setState({access_token: 'expired'})
+    logout();
+    this.setState({
+      access_token: undefined,
+      current_user: '',
+      current_user_id: '',
+      category_names: [],
+      my_playlist: ''
+    })
   }
 
   updateSettings(atp, follow, fav) {
@@ -217,6 +238,19 @@ export default class App extends Component {
 
   render () {
     const token = Cookies.get('spotifyAuthToken')
+
+    if (this.state.auth_pending) {
+      return (
+        <div className="App">
+          <div className="media-container">
+            <div className="landing-page photo">
+              <div className="auth-status">Signing you in…</div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="App">
         {token||this.state.current_user_id ? (
@@ -242,11 +276,10 @@ export default class App extends Component {
         // Display the login page
         <div className="media-container">
           <div className="landing-page photo">
-          <SpotifyAuth
-            redirectUri='https://artist-disco-react-frontend.web.app/callback'
-            clientID={REACT_APP_SPOTIFIY_CLIENT_ID}
-            scopes={[Scopes.userReadPrivate, 'ugc-image-upload', 'user-read-email', 'playlist-modify-public', 'playlist-modify-private', 'user-follow-modify', 'user-library-modify']} // either style will work
-          />
+            <SpotifyLoginButton />
+            {this.state.auth_error && (
+              <div className="auth-status error">Could not sign in: {this.state.auth_error}</div>
+            )}
           </div>
         </div>
       )}
