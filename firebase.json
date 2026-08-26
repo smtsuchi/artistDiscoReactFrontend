@@ -14,17 +14,17 @@
     ],
     "headers": [
       {
-        "comment": "Vite fingerprints these, so a new build is always a new URL.",
-        "source": "/assets/**",
+        "comment": "Default: never cache. Every path here serves index.html via the SPA rewrite, and index.html points at the fingerprinted assets — so caching it serves a stale app after a deploy (Firebase's own default is max-age=3600). Matching '**' rather than '/index.html' because the rewritten routes ('/', '/settings', ...) are what browsers actually request. When several header rules match, Firebase applies the LAST one, so this general rule must come before the asset rule below.",
+        "source": "**",
         "headers": [
-          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+          { "key": "Cache-Control", "value": "no-cache" }
         ]
       },
       {
-        "comment": "index.html points at the fingerprinted assets, so it must never be cached — Firebase defaults it to max-age=3600, which serves a stale app for an hour after every deploy.",
-        "source": "/index.html",
+        "comment": "Vite fingerprints these, so a new build is always a new URL and they can be cached forever.",
+        "source": "/assets/**",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache" }
+          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
         ]
       }
     ]
