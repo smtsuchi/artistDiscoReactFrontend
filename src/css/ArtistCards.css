@@ -95,16 +95,36 @@ body {
     width: 100%;
 }
 .thmbnl {grid-area: thmbnl;}
-.ticker {grid-area: tckr;}
 .adctrl {grid-area: adctrl;}
 .preview-track > img {
     height:10vh;
     box-shadow: -1px 1px 10px black;
 }
 .tckr {
+    grid-area: tckr;
     color: white;
     text-shadow: 2px 2px 2px black;
     white-space: nowrap;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+}
+.tckr > h3 {
+    margin: 0;
+    padding-right: 3em;
+    animation: tckr-scroll 12s linear infinite;
+}
+.tckr > h3::after {
+    content: attr(data-title);
+    padding-left: 3em;
+}
+@keyframes tckr-scroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .tckr > h3 { animation: none; }
+    .tckr > h3::after { content: none; }
 }
 audio {
     height: 6vh;

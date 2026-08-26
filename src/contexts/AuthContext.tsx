@@ -1,11 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import Cookies from 'js-cookie';
 import { SpotifyUser } from '../types';
+import {
+  completeLogin,
+  hasAuthResponse,
+  canRefresh,
+  refreshToken,
+  clearTokens,
+} from '../services/spotifyAuth';
 
 interface AuthContextType {
   token: string | undefined;
   currentUser: SpotifyUser | null;
   isAuthenticated: boolean;
+  /** True while the PKCE code exchange or a silent refresh is still running. */
+  authPending: boolean;
+  authError: string;
   setToken: (token: string | undefined) => void;
   setCurrentUser: (user: SpotifyUser | null) => void;
   logout: () => void;
@@ -53,6 +63,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
+    clearTokens();
     setToken(undefined);
     setCurrentUser(null);
     localStorage.removeItem('spotifyAuthUser');
@@ -60,6 +71,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const isAuthenticated = !!token && token !== 'expired';
+
+  // Spotify has redirected back with a ?code=, or we hold a refresh token —
+  // either way there's a token to resolve before the app should render.
+  const [authPending, setAuthPending] = useState<boolean>(
+    () => hasAuthResponse() || (!Cookies.get('spotifyAuthToken') && canRefresh())
+  );
+  const [authError, setAuthError] = useState<string>('');
+
+  useEffect(() => {
+    if (!authPending) { return }
+    const returningFromSpotify = hasAuthResponse();
+    (async () => {
+      try {
+        const newToken = returningFromSpotify ? await completeLogin() : await refreshToken();
+        setTokenState(newToken || undefined);
+      } catch (err) {
+        clearTokens();
+        setTokenState(undefined);
+        setAuthError(err instanceof Error ? err.message : 'Sign in failed');
+      } finally {
+        setAuthPending(false);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     // Update token from cookies on mount
@@ -101,6 +136,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     token,
     currentUser,
     isAuthenticated,
+    authPending,
+    authError,
     setToken,
     setCurrentUser: setCurrentUserWithPersistence,
     logout,

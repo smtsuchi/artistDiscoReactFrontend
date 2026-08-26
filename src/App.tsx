@@ -1,14 +1,9 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { SpotifyApiContext } from 'react-spotify-api';
-import { SpotifyAuth, Scopes } from 'react-spotify-auth';
-import 'react-spotify-auth/dist/index.css';
 import { useAuth } from './contexts/AuthContext';
 import Header from './components/Header';
+import SpotifyLoginButton from './components/SpotifyLoginButton';
 import './css/App.css';
-
-const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
-const REDIRECT_URI = 'https://artist-disco-react-frontend.web.app/callback';
 
 // Lazy load route components for code splitting
 const Callback = lazy(() => import('./components/Callback'));
@@ -26,12 +21,25 @@ const LoadingFallback = () => (
 );
 
 const App: React.FC = () => {
-  const { token, isAuthenticated } = useAuth();
+  const { isAuthenticated, authPending, authError } = useAuth();
+
+  // Don't flash the login screen while a code exchange or refresh is in flight.
+  if (authPending) {
+    return (
+      <div className="App">
+        <div className="media-container">
+          <div className="landing-page photo">
+            <div className="auth-status">Signing you in…</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="App">
       {isAuthenticated ? (
-        <SpotifyApiContext.Provider value={token}>
+        <>
           <Header />
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
@@ -43,24 +51,15 @@ const App: React.FC = () => {
               <Route path="/login" element={<Login />} />
             </Routes>
           </Suspense>
-        </SpotifyApiContext.Provider>
+        </>
       ) : (
         // Display the Spotify login page
         <div className="media-container">
           <div className="landing-page photo">
-            <SpotifyAuth
-              redirectUri={REDIRECT_URI}
-              clientID={SPOTIFY_CLIENT_ID}
-              scopes={[
-                Scopes.userReadPrivate,
-                'ugc-image-upload',
-                'user-read-email',
-                'playlist-modify-public',
-                'playlist-modify-private',
-                'user-follow-modify',
-                'user-library-modify',
-              ]}
-            />
+            <SpotifyLoginButton />
+            {authError && (
+              <div className="auth-status error">Could not sign in: {authError}</div>
+            )}
           </div>
         </div>
       )}

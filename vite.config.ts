@@ -5,6 +5,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Spotify rejects http://localhost redirect URIs as insecure — only HTTPS
+    // or the loopback IP are accepted — so dev has to bind 127.0.0.1 for the
+    // OAuth round trip to work.
+    host: '127.0.0.1',
     port: 3000,
     proxy: {
       // Proxy API requests to backend if needed

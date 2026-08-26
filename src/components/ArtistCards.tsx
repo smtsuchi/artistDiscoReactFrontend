@@ -1,6 +1,5 @@
 import React, { RefObject } from 'react';
 import TinderCard from 'react-tinder-card';
-import Ticker from 'react-ticker';
 import { SpotifyArtist } from '../types';
 
 interface ArtistCardsProps {
@@ -37,18 +36,13 @@ const ArtistCards: React.FC<ArtistCardsProps> = ({
               alt="Track Thumbnail"
               src={artist.track_thumbnail || ''}
             />
-            <Ticker mode="smooth">
-              {() => (
-                <>
-                  <div className="tckr">
-                    <h3>
-                      {artist.track_name}
-                      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                    </h3>
-                  </div>
-                </>
-              )}
-            </Ticker>
+            {/* CSS marquee, replacing react-ticker: its peer range caps at
+                React 17, so it makes `npm install` fail outright on React 18. */}
+            <div className="tckr">
+              <h3 data-title={artist.track_name} aria-label={artist.track_name}>
+                {artist.track_name}
+              </h3>
+            </div>
             <div className="adctrl">
               <audio controls>
                 <source src={artist.track_preview || ''} type="audio/mpeg" />

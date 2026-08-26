@@ -83,11 +83,14 @@ const Callback: React.FC = () => {
           );
 
           if (createResult.success && createResult.data) {
+            // The modernised backend returns the created user document as
+            // `data` itself; `data.createdUser` was the old Glitch shape and
+            // is undefined now, which crashed the new-user path.
             setUserData({
               userId: currentSpotifyUser.id,
               displayName: currentSpotifyUser.display_name,
-              categoryNames: createResult.data.createdUser.category_names,
-              settings: createResult.data.createdUser.settings,
+              categoryNames: createResult.data.category_names,
+              settings: createResult.data.settings,
               myPlaylist: playlistData.id,
             });
           } else {
