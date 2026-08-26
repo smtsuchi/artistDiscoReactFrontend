@@ -65,6 +65,18 @@
 .auth-status.error {
     color: #ff6b6b;
 }
+.auth-detail {
+    margin-top: 6px;
+    font-size: 12px;
+    opacity: .8;
+    word-break: break-word;
+}
+.auth-detail.error {
+    color: #ff6b6b;
+}
+.profile-problem .button {
+    margin: 6px 4px 0 4px;
+}
 .btn {
     height: 40px;
     align-self: center;

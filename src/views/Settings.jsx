@@ -1,5 +1,6 @@
 import React, { Component } from 'react'
 import "../css/Settings.css"
+import { getJson } from '../api'
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL
 export default class Settings extends Component {
     constructor(props) {
@@ -20,10 +21,10 @@ export default class Settings extends Component {
     async componentDidMount() {
         // Get settings from database
         if (this.props.current_user_id){
-            let getres = await fetch(`${BACKEND_URL}/userData/settings/${this.props.current_user_id}`, {
+            let getdata = await getJson(`${BACKEND_URL}/userData/settings/${this.props.current_user_id}`, {
                 method: "GET"
             });
-            let getdata = await getres.json();
+            if (!getdata) { return }
             this.setState({
                 current_playlist: getdata.current_playlist,
                 add_to_playlist_on_like: getdata.add_to_playlist_on_like,

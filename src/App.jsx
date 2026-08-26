@@ -11,6 +11,7 @@ import IndividualCard from "./views/IndividualCard";
 import Login from "./components/Login";
 import SpotifyLoginButton from "./components/SpotifyLoginButton";
 import { completeLogin, hasAuthResponse, canRefresh, refreshToken, logout } from "./spotifyAuth";
+import { getJson } from "./api";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL
 
@@ -40,10 +41,16 @@ export default class App extends Component {
         // Spotify has redirected us back with a ?code=, or we have a refresh
         // token to spend — either way, hold off rendering until it resolves.
         auth_pending: hasAuthResponse() || (!Cookies.get('spotifyAuthToken') && canRefresh()),
-        auth_error: ''
+        auth_error: '',
+        // Loading the backend profile is a SEPARATE concern from being signed
+        // in. Treating "no profile" as "logged out" is what made a dead
+        // backend show a login prompt to an already-authenticated user.
+        profile_status: 'idle', // idle | loading | ready | error
+        profile_error: ''
       }
     // }
     this.returning_from_spotify = hasAuthResponse();
+    this.loadProfile = this.loadProfile.bind(this);
     this.getCurrentUser = this.getCurrentUser.bind(this);
     this.getCurrentUserData = this.getCurrentUserData.bind(this);
     this.generateArtists = this.generateArtists.bind(this);
@@ -53,13 +60,47 @@ export default class App extends Component {
   }
 
   async componentDidMount() {
-    if (!this.state.auth_pending) { return }
+    let token = Cookies.get('spotifyAuthToken');
+
+    if (this.state.auth_pending) {
+      try {
+        token = this.returning_from_spotify ? await completeLogin() : await refreshToken();
+        this.setState({access_token: token, auth_pending: false})
+      } catch (err) {
+        logout();
+        this.setState({auth_pending: false, auth_error: err.message})
+        return
+      }
+    }
+
+    // Load the profile whenever we hold a token — not only after an OAuth
+    // redirect. Previously this ran solely from /callback, so a refresh or a
+    // deep link left current_user empty forever.
+    if (token) { this.loadProfile() }
+  }
+
+  async loadProfile() {
+    if (this.state.profile_status === 'loading') { return }
+    this.setState({profile_status: 'loading', profile_error: ''})
     try {
-      const token = this.returning_from_spotify ? await completeLogin() : await refreshToken();
-      this.setState({access_token: token, auth_pending: false})
+      await this.getCurrentUserData();
+      this.setState({profile_status: 'ready'})
     } catch (err) {
-      logout();
-      this.setState({auth_pending: false, auth_error: err.message})
+      // A 401 means the token itself is dead, which re-authenticating does fix.
+      // Anything else is a backend problem, and bouncing the user to the login
+      // screen would just be a lie.
+      if (err.status === 401) {
+        logout();
+        this.setState({
+          access_token: undefined,
+          current_user: '',
+          current_user_id: '',
+          profile_status: 'idle',
+          auth_error: 'Your Spotify session expired. Please sign in again.'
+        })
+        return
+      }
+      this.setState({profile_status: 'error', profile_error: err.message})
     }
   }
 
@@ -83,7 +124,7 @@ export default class App extends Component {
 
   async getCurrentUser() {
     // console.log('getting current user');
-    let res = await fetch('	https://api.spotify.com/v1/me', {
+    let data = await getJson('https://api.spotify.com/v1/me', {
       method: 'GET',
       headers: {
         "Accept": "application/json",
@@ -91,7 +132,6 @@ export default class App extends Component {
         "Authorization": "Bearer " + Cookies.get('spotifyAuthToken')
       }
     })
-    let data = await res.json();
     // console.log('spotify get cur_user', data)
     // this.setState({
     //   current_user: data.display_name,
@@ -103,10 +143,11 @@ export default class App extends Component {
   async getCurrentUserData() {
     const my_current_spotify = await this.getCurrentUser();
     // console.log('getting current user data from backend');
-    let res = await fetch(`${BACKEND_URL}/userData/${my_current_spotify.id}`, {
+    // getJson maps the backend's 404 ("no such user yet") to null, which is the
+    // create-a-profile branch below.
+    let data = await getJson(`${BACKEND_URL}/userData/${my_current_spotify.id}`, {
       method: 'GET'
     })
-    let data = await res.json();
     // console.log('this backend', data)
     if (data) {
       const user={
@@ -144,17 +185,17 @@ export default class App extends Component {
       
       // add cover art
 
-      let postres = await fetch(`${BACKEND_URL}/userData`, {
+      // Returns the created user document itself now, not {createdUser: ...}.
+      let createdUser = await getJson(`${BACKEND_URL}/userData`, {
         method: 'POST',
         body: urlencoded
       });
-      let postdata = await postres.json();
-      // console.log('just created a new user', postdata)
+      // console.log('just created a new user', createdUser)
       this.setState({
         current_user: my_current_spotify.display_name,
         current_user_id: my_current_spotify.id,
-        category_names: postdata.createdUser.category_names,
-        settings: postdata.createdUser.settings,
+        category_names: createdUser.category_names,
+        settings: createdUser.settings,
         my_playlist: playlist_data.id
       })
       return postdata
@@ -170,11 +211,11 @@ export default class App extends Component {
     
     if (this.state.category_names.includes(category_name)) {
       // Load the saved database data
-      let getres = await fetch(`${BACKEND_URL}/category/${this.state.current_user_id}/${category_name}`, {
+      // Returns the category document itself now, not {myCategory: ...}.
+      let category = await getJson(`${BACKEND_URL}/category/${this.state.current_user_id}/${category_name}`, {
         method: "GET"
       })
-      let getdata = await getres.json();
-      let buffer = getdata.myCategory.buffer
+      let buffer = category.buffer
 
       let mySettings = this.state.settings;
       mySettings.current_playlist = category_name;
@@ -227,12 +268,14 @@ export default class App extends Component {
   }
 
   checkLogin(){
-    let loggedin = true;
-    let current_user_name = this.state.current_user;
-    if (current_user_name) {
-      return {loggedin, current_user_name}
+    // Signed in is about holding a Spotify token. The display name only shows
+    // up once the backend profile loads, so it must not gate "logged in".
+    return {
+      loggedin: !!Cookies.get('spotifyAuthToken'),
+      current_user_name: this.state.current_user,
+      profile_status: this.state.profile_status,
+      profile_error: this.state.profile_error
     }
-    return {loggedin: false, current_user_name}
   }
 
   render () {
@@ -256,11 +299,11 @@ export default class App extends Component {
         <>
           <Header my_playlist={this.state.my_playlist} settings={this.state.settings} current_user_id={this.state.current_user_id}/>
             <Routes>
-              <Route path="/callback" element={<Callback getCurrentUser={this.getCurrentUser} getCurrentUserData={this.getCurrentUserData} token={token}/>} />
+              <Route path="/callback" element={<Callback profile_status={this.state.profile_status} profile_error={this.state.profile_error} loadProfile={this.loadProfile} reset={this.reset}/>} />
               <Route path="/" element={<SwipePage />} />
               <Route path="/artistdetails" element={<IndividualCard current_user_id={this.state.current_user_id} category_name={this.state.settings.current_playlist} />} />
               <Route path="/settings" element={<Settings updateSettings={this.updateSettings} current_user_id={this.state.current_user_id} settings={this.state.settings} />} />
-              <Route path="/genreselect" element={<GenreSelect checkLogin={this.checkLogin} my_playlist={this.state.my_playlist} settings={this.state.settings} generateArtists={this.generateArtists} current_user_id={this.state.current_user_id} category_names={this.state.category_names}/>} />
+              <Route path="/genreselect" element={<GenreSelect checkLogin={this.checkLogin} loadProfile={this.loadProfile} reset={this.reset} my_playlist={this.state.my_playlist} settings={this.state.settings} generateArtists={this.generateArtists} current_user_id={this.state.current_user_id} category_names={this.state.category_names}/>} />
               <Route path="/login" element={<Login reset={this.reset} />} />
             </Routes>
         </>

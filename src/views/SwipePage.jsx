@@ -7,6 +7,7 @@ import Footer from '../components/Footer';
 import ArtistCards from '../components/ArtistCards';
 import { Navigate } from 'react-router-dom';
 import withRouter from '../withRouter';
+import { getJson } from '../api';
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL
 // const alreadyRemoved = [];
 // let charactersState = 'hi';
@@ -177,13 +178,11 @@ class SwipePage extends Component {
                 //grab data from database then set state to re-render
                 // console.log('else')
 
-                let getres = await fetch(`${BACKEND_URL}/category/${this.props.location.state.current_user_id}/${category_name}`, {
+                // Returns the category document itself now, not {myCategory: ...}.
+                let data = await getJson(`${BACKEND_URL}/category/${this.props.location.state.current_user_id}/${category_name}`, {
                     method: 'GET'
                 });
-                let getdata = await getres.json()
-                // console.log(`get ${this.props.location.state.category_name} category: `, getdata)
-                let data = getdata.myCategory
-        
+
                 this.setState({
                     artists: data.artists,
                     buffer: data.buffer,
@@ -200,8 +199,10 @@ class SwipePage extends Component {
             // else {this.getRelatedArtists(this.state.liked[this.state.liked_count])}
         }
         else {
-            // console.log('No State.. Redirecting')
-            this.setState({redirect:'/login'})
+            // No category picked yet — that's not a failed login, so send them
+            // to pick one. Redirecting to /login here made a plain page refresh
+            // log the user out, since /login calls reset().
+            this.setState({redirect:'/genreselect'})
         }
 
     }
@@ -362,7 +363,7 @@ class SwipePage extends Component {
 
     render() {
         if (this.state.redirect) {
-            return <Navigate to='/login' replace />
+            return <Navigate to={this.state.redirect} replace />
         }
         return (
             <div className="swipePage">

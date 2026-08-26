@@ -1,5 +1,6 @@
 import React, { Component } from 'react'
 import "../css/IndividualCard.css"
+import { getJson } from '../api'
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL
 export default class IndividualCard extends Component {
     constructor(props) {
@@ -10,13 +11,12 @@ export default class IndividualCard extends Component {
     }
 
     async componentDidMount(){
-        let getres = await fetch(`${BACKEND_URL}/category/single/${this.props.current_user_id}/${this.props.category_name}`, {
+        // Returns the artist itself now, not {individual_card: ...}.
+        let artist = await getJson(`${BACKEND_URL}/category/single/${this.props.current_user_id}/${this.props.category_name}`, {
             method: "GET"
         });
-        let getdata = await getres.json();
-        // console.log(getdata)
         this.setState({
-            current_artist: getdata.individual_card
+            current_artist: artist
         })
     }
 
