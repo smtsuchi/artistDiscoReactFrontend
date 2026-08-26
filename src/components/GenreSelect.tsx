@@ -31,7 +31,7 @@ const GENRES = [
 ];
 
 const GenreSelect: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, isAuthenticated, logout } = useAuth();
   const { userId, categoryNames, settings, myPlaylist, addCategory, setCurrentPlaylist } = useUser();
   const navigate = useNavigate();
 
@@ -141,11 +141,12 @@ const GenreSelect: React.FC = () => {
     }
   };
 
-  const handleRelogin = () => {
-    navigate('/callback');
-  };
-
-  const isLoggedIn = !!currentUser;
+  // Signed in is about holding a Spotify token. currentUser is the profile
+  // fetched from Spotify afterwards — using it to decide "logged in" meant a
+  // slow or failed profile fetch showed a "Re-Log In" button to an already
+  // authenticated user, which re-logging in could never fix.
+  const signedIn = isAuthenticated;
+  const profileLoaded = !!currentUser;
 
   return (
     <div className="main">
@@ -175,12 +176,17 @@ const GenreSelect: React.FC = () => {
       </div>
 
       <div className="loggedin">
-        {isLoggedIn ? (
+        {!signedIn ? (
+          <h3>Not signed in.</h3>
+        ) : profileLoaded ? (
           <h3>Logged in as: {currentUser.display_name}</h3>
         ) : (
-          <button id="login-btn" className="button" onClick={handleRelogin}>
-            Re-Log In
-          </button>
+          <>
+            <h3>Loading your profile…</h3>
+            <button className="button" onClick={logout}>
+              Sign out
+            </button>
+          </>
         )}
       </div>
     </div>

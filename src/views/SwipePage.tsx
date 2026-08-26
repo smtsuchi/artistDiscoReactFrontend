@@ -20,7 +20,10 @@ const SwipePage: React.FC = () => {
   const [visited, setVisited] = useState<Set<string>>(new Set());
   const [childRefs, setChildRefs] = useState<React.RefObject<any>[]>([]);
   const [buffer, setBuffer] = useState<string[]>([]);
-  const [redirect, setRedirect] = useState(false);
+  // Holds a path rather than a boolean. Everything used to funnel to /login,
+  // but /login calls logout() — so a missing genre or a failed Spotify call
+  // signed the user out instead of just sending them somewhere sensible.
+  const [redirect, setRedirect] = useState<string | null>(null);
 
   const exButton = useRef<HTMLDivElement>(null);
 
@@ -81,8 +84,13 @@ const SwipePage: React.FC = () => {
   const getRelatedArtists = useCallback(
     async (artistId: string, remainingDeckLength?: number) => {
       const token = Cookies.get('spotifyAuthToken');
-      if (!token || !state) {
-        setRedirect(true);
+      if (!token) {
+        // Genuinely unauthenticated — signing out is correct here.
+        setRedirect('/login');
+        return;
+      }
+      if (!state) {
+        setRedirect('/genreselect');
         return;
       }
 
@@ -186,8 +194,12 @@ const SwipePage: React.FC = () => {
 
         return 'done';
       } catch (error) {
+        // A Spotify or backend failure is not an auth failure. Note that
+        // /artists/{id}/related-artists was restricted by Spotify in Nov 2024
+        // and returns 403 for apps in development mode, which used to land
+        // here and sign the user out.
         console.error('Error getting related artists:', error);
-        setRedirect(true);
+        setRedirect('/genreselect');
       }
     },
     [visited, used, state]
@@ -196,7 +208,8 @@ const SwipePage: React.FC = () => {
   useEffect(() => {
     const initializeArtists = async () => {
       if (!state) {
-        setRedirect(true);
+        // No genre chosen yet — go pick one, don't sign the user out.
+        setRedirect('/genreselect');
         return;
       }
 
@@ -412,7 +425,7 @@ const SwipePage: React.FC = () => {
   };
 
   if (redirect) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={redirect} replace />;
   }
 
   return (
