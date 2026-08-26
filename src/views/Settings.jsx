@@ -1,6 +1,6 @@
 import React, { Component } from 'react'
 import "../css/Settings.css"
-const REACT_APP_BACKEND_URL = process.env.REACT_APP_BACKEND_URL
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL
 export default class Settings extends Component {
     constructor(props) {
         super(props);
@@ -20,7 +20,7 @@ export default class Settings extends Component {
     async componentDidMount() {
         // Get settings from database
         if (this.props.current_user_id){
-            let getres = await fetch(`${REACT_APP_BACKEND_URL}/userData/settings/${this.props.current_user_id}`, {
+            let getres = await fetch(`${BACKEND_URL}/userData/settings/${this.props.current_user_id}`, {
                 method: "GET"
             });
             let getdata = await getres.json();
@@ -46,7 +46,7 @@ export default class Settings extends Component {
         let raw = JSON.stringify({value: newVal});
         // console.log('atp', raw)
         
-        let postres = await fetch(`${REACT_APP_BACKEND_URL}/atp/${this.props.current_user_id}`, {
+        let postres = await fetch(`${BACKEND_URL}/atp/${this.props.current_user_id}`, {
             method: "POST",
             headers: {
                 "Accept": "application/json",
@@ -70,7 +70,7 @@ export default class Settings extends Component {
         
         let raw = JSON.stringify({value: newVal});
         // console.log('fav', raw)
-        let postres = await fetch(`${REACT_APP_BACKEND_URL}/fav/${this.props.current_user_id}`, {
+        let postres = await fetch(`${BACKEND_URL}/fav/${this.props.current_user_id}`, {
             method: "POST",
             headers: {
                 "Accept": "application/json",
@@ -94,7 +94,7 @@ export default class Settings extends Component {
         
         let raw = JSON.stringify({value: newVal});
         // console.log('follow', raw)
-        let postres = await fetch(`${REACT_APP_BACKEND_URL}/follow/${this.props.current_user_id}`, {
+        let postres = await fetch(`${BACKEND_URL}/follow/${this.props.current_user_id}`, {
             method: "POST",
             headers: {
                 "Accept": "application/json",

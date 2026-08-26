@@ -4,8 +4,8 @@ import Cookies from 'js-cookie';
 // Authorization Code with PKCE. PKCE is the browser-safe variant: no client
 // secret is ever needed, so nothing sensitive ends up in the bundle.
 
-const CLIENT_ID = process.env.REACT_APP_SPOTIFIY_CLIENT_ID;
-const REDIRECT_URI = process.env.REACT_APP_SPOTIFIY_REDIRECT_URI || `${window.location.origin}/callback`;
+const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
+const REDIRECT_URI = import.meta.env.VITE_SPOTIFY_REDIRECT_URI || `${window.location.origin}/callback`;
 
 const SCOPES = [
     'user-read-private',
@@ -94,8 +94,7 @@ export const login = async () => {
     window.location = `https://accounts.spotify.com/authorize?${params.toString()}`;
 };
 
-/** Trade the ?code= we were redirected back with for an access token. */
-export const completeLogin = async () => {
+const doCompleteLogin = async () => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const error = params.get('error');
@@ -127,24 +126,47 @@ export const completeLogin = async () => {
 };
 
 /**
- * Silently get a fresh access token. Returns null when there is nothing to
- * refresh with, so callers can fall back to the login screen.
+ * Trade the ?code= we were redirected back with for an access token.
+ *
+ * An authorization code is single-use, and React's StrictMode mounts twice in
+ * development — so this memoises the in-flight exchange rather than letting the
+ * second mount replay a code that has already been spent.
  */
-export const refreshToken = async () => {
-    const refresh_token = window.localStorage.getItem(REFRESH_KEY);
-    if (!refresh_token) {
-        return null;
+let loginExchange = null;
+export const completeLogin = () => {
+    if (!loginExchange) {
+        loginExchange = doCompleteLogin();
     }
-    try {
-        return await requestToken({ grant_type: 'refresh_token', refresh_token: refresh_token });
-    } catch (err) {
-        window.localStorage.removeItem(REFRESH_KEY);
-        return null;
+    return loginExchange;
+};
+
+/**
+ * Silently get a fresh access token. Returns null when there is nothing to
+ * refresh with, so callers can fall back to the login screen. Also deduped, so
+ * a double mount doesn't fire two refreshes.
+ */
+let refreshInFlight = null;
+export const refreshToken = () => {
+    if (!refreshInFlight) {
+        refreshInFlight = (async () => {
+            const refresh_token = window.localStorage.getItem(REFRESH_KEY);
+            if (!refresh_token) {
+                return null;
+            }
+            try {
+                return await requestToken({ grant_type: 'refresh_token', refresh_token: refresh_token });
+            } catch (err) {
+                window.localStorage.removeItem(REFRESH_KEY);
+                return null;
+            }
+        })();
     }
+    return refreshInFlight;
 };
 
 export const logout = () => {
     Cookies.remove(TOKEN_COOKIE);
     window.localStorage.removeItem(REFRESH_KEY);
     window.localStorage.removeItem('spotifyUser');
+    refreshInFlight = null;
 };

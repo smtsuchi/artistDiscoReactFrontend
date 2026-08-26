@@ -1,21 +1,11 @@
 import React, { Component } from 'react'
 // import Cookies from 'js-cookie';
-import { Redirect } from 'react-router-dom'
 import "../css/GenreSelect.css"
+import withRouter from '../withRouter'
 
-export default class GenreSelect extends Component {
+class GenreSelect extends Component {
     constructor(props) {
         super(props);
-
-        this.state = {
-            buffer: [],
-            first_time: true,
-            redirect: null,
-            atp: this.props.settings.add_to_playlist_on_like,
-            fav: this.props.settings.fav_on_like,
-            follow: this.props.settings.follow_on_like,
-            my_playlist: this.props.my_playlist
-        }
         this.relog = this.relog.bind(this);
     }
 
@@ -24,44 +14,28 @@ export default class GenreSelect extends Component {
         const selected_index = e.target[0].options.selectedIndex;
         const category_name = e.target[0][selected_index].innerHTML;
         let response = await this.props.generateArtists(e);
-        let buffer = response.buffer;
-        let first_time = response.first_time;
-        
+        if (!response) { return }
 
-        this.setState({ 
-            buffer: buffer,
-            first_time: first_time,
-            selected_index: selected_index,
-            category_name: category_name,
-            redirect: "/"
+        this.props.navigate('/', {
+            state: {
+                artist_id: response.buffer,
+                first_time: response.first_time,
+                category_name: category_name,
+                current_user_id: this.props.current_user_id,
+                atp: this.props.settings.add_to_playlist_on_like,
+                fav: this.props.settings.fav_on_like,
+                follow: this.props.settings.follow_on_like,
+                my_playlist: this.props.my_playlist
+            }
         })
     }
 
     relog(){
-        this.setState({redirect: "/callback"})
+        this.props.navigate('/callback')
     }
-    
+
 
     render() {
-        if (this.state.redirect) {
-            if (this.state.redirect==="/"){
-                return (<Redirect to={{
-                    pathname: this.state.redirect,
-                    state: {
-                        artist_id:this.state.buffer,
-                        first_time:this.state.first_time,
-                        category_name:this.state.category_name,
-                        current_user_id:this.props.current_user_id,
-                        atp: this.state.atp,
-                        fav: this.state.fav,
-                        follow: this.state.follow,
-                        my_playlist: this.props.my_playlist
-                    }
-                }} />)
-            } else if (this.state.redirect==="/callback"){
-                return (<Redirect to="/callback" />)
-            }
-        }
         // console.log('rendering genre access')
         let loggedin = this.props.checkLogin()
         if (loggedin.loggedin){
@@ -138,3 +112,5 @@ export default class GenreSelect extends Component {
         )
     }
 }
+
+export default withRouter(GenreSelect);

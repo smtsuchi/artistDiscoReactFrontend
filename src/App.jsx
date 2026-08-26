@@ -1,7 +1,6 @@
 import React, { Component } from "react";
-import { SpotifyApiContext } from 'react-spotify-api';
 import Cookies from 'js-cookie';
-import { Switch, Route } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import Header from "./components/Header";
 import Callback from "./components/Callback";
 import "./css/App.css"
@@ -13,7 +12,7 @@ import Login from "./components/Login";
 import SpotifyLoginButton from "./components/SpotifyLoginButton";
 import { completeLogin, hasAuthResponse, canRefresh, refreshToken, logout } from "./spotifyAuth";
 
-const REACT_APP_BACKEND_URL = process.env.REACT_APP_BACKEND_URL
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL
 
 export default class App extends Component {
   constructor() {
@@ -104,7 +103,7 @@ export default class App extends Component {
   async getCurrentUserData() {
     const my_current_spotify = await this.getCurrentUser();
     // console.log('getting current user data from backend');
-    let res = await fetch(`${REACT_APP_BACKEND_URL}/userData/${my_current_spotify.id}`, {
+    let res = await fetch(`${BACKEND_URL}/userData/${my_current_spotify.id}`, {
       method: 'GET'
     })
     let data = await res.json();
@@ -145,7 +144,7 @@ export default class App extends Component {
       
       // add cover art
 
-      let postres = await fetch(`${REACT_APP_BACKEND_URL}/userData`, {
+      let postres = await fetch(`${BACKEND_URL}/userData`, {
         method: 'POST',
         body: urlencoded
       });
@@ -171,7 +170,7 @@ export default class App extends Component {
     
     if (this.state.category_names.includes(category_name)) {
       // Load the saved database data
-      let getres = await fetch(`${REACT_APP_BACKEND_URL}/category/${this.state.current_user_id}/${category_name}`, {
+      let getres = await fetch(`${BACKEND_URL}/category/${this.state.current_user_id}/${category_name}`, {
         method: "GET"
       })
       let getdata = await getres.json();
@@ -206,7 +205,7 @@ export default class App extends Component {
         let urlencoded = new URLSearchParams();
         urlencoded.append("category_name", category_name);
         urlencoded.append("buffer", buffer);
-        let postres = await fetch(`${REACT_APP_BACKEND_URL}/category/${this.state.current_user_id}`, {
+        let postres = await fetch(`${BACKEND_URL}/category/${this.state.current_user_id}`, {
           method: "POST",
           body: urlencoded
         })
@@ -254,24 +253,17 @@ export default class App extends Component {
     return (
       <div className="App">
         {token||this.state.current_user_id ? (
-        <SpotifyApiContext.Provider value={token}>
-          {/* Your Spotify Code here */}
+        <>
           <Header my_playlist={this.state.my_playlist} settings={this.state.settings} current_user_id={this.state.current_user_id}/>
-            <Switch>
-              <Route path="/callback" render={() => <Callback getCurrentUser={this.getCurrentUser} getCurrentUserData={this.getCurrentUserData} token={token}/>} />
-              <Route exact path="/"component={SwipePage} render={() => <SwipePage />} />
-              <Route exact path="/artistdetails"  render={() => <IndividualCard current_user_id={this.state.current_user_id} category_name={this.state.settings.current_playlist} />} />
-              <Route exact path="/settings" render={() => <Settings updateSettings={this.updateSettings} current_user_id={this.state.current_user_id} settings={this.state.settings} />} />
-              <Route exact path="/genreselect" render={() => <GenreSelect checkLogin={this.checkLogin} my_playlist={this.state.my_playlist} settings={this.state.settings} generateArtists={this.generateArtists} current_user_id={this.state.current_user_id} category_names={this.state.category_names}/>} />
-              <Route exact path="/login" render={() => <Login reset={this.reset} /> }  />
-              
-              {/* Header */}
-              
-              {/* Cards */}
-              {/* Footer Buttons */}
-
-            </Switch>
-        </SpotifyApiContext.Provider>
+            <Routes>
+              <Route path="/callback" element={<Callback getCurrentUser={this.getCurrentUser} getCurrentUserData={this.getCurrentUserData} token={token}/>} />
+              <Route path="/" element={<SwipePage />} />
+              <Route path="/artistdetails" element={<IndividualCard current_user_id={this.state.current_user_id} category_name={this.state.settings.current_playlist} />} />
+              <Route path="/settings" element={<Settings updateSettings={this.updateSettings} current_user_id={this.state.current_user_id} settings={this.state.settings} />} />
+              <Route path="/genreselect" element={<GenreSelect checkLogin={this.checkLogin} my_playlist={this.state.my_playlist} settings={this.state.settings} generateArtists={this.generateArtists} current_user_id={this.state.current_user_id} category_names={this.state.category_names}/>} />
+              <Route path="/login" element={<Login reset={this.reset} />} />
+            </Routes>
+        </>
       ) : (
         // Display the login page
         <div className="media-container">

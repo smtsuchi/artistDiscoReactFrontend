@@ -1,6 +1,6 @@
 import React, { Component } from 'react'
 import "../css/IndividualCard.css"
-const REACT_APP_BACKEND_URL = process.env.REACT_APP_BACKEND_URL
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL
 export default class IndividualCard extends Component {
     constructor(props) {
         super(props);
@@ -10,7 +10,7 @@ export default class IndividualCard extends Component {
     }
 
     async componentDidMount(){
-        let getres = await fetch(`${REACT_APP_BACKEND_URL}/category/single/${this.props.current_user_id}/${this.props.category_name}`, {
+        let getres = await fetch(`${BACKEND_URL}/category/single/${this.props.current_user_id}/${this.props.category_name}`, {
             method: "GET"
         });
         let getdata = await getres.json();

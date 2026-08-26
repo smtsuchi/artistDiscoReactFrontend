@@ -1,5 +1,5 @@
 import React, { Component } from 'react'
-import { Redirect } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 // import { getHashParams } from '../getHash'
 
 export default class Callback extends Component {
@@ -16,7 +16,7 @@ export default class Callback extends Component {
     }
     render() {
         if (true) {
-            return <Redirect to="/genreselect" />
+            return <Navigate to="/genreselect" replace />
         }
         return (
             

@@ -5,13 +5,14 @@ import "../css/Footer.css";
 import "../css/SwipePage.css"
 import Footer from '../components/Footer';
 import ArtistCards from '../components/ArtistCards';
-import { Redirect } from 'react-router-dom';
-const REACT_APP_BACKEND_URL = process.env.REACT_APP_BACKEND_URL
+import { Navigate } from 'react-router-dom';
+import withRouter from '../withRouter';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL
 // const alreadyRemoved = [];
 // let charactersState = 'hi';
-export default class SwipePage extends Component {
-    constructor () {
-        super();
+class SwipePage extends Component {
+    constructor (props) {
+        super(props);
 
         this.state = {
             artists: [],
@@ -136,7 +137,7 @@ export default class SwipePage extends Component {
             })
             
             // console.log('raw: ', raw)
-            let postres = await fetch(`${REACT_APP_BACKEND_URL}/patch-category/${this.props.location.state.current_user_id}/${this.props.location.state.category_name}`, {
+            let postres = await fetch(`${BACKEND_URL}/patch-category/${this.props.location.state.current_user_id}/${this.props.location.state.category_name}`, {
                 method: 'POST',
                 headers: {
                     "Accept": "application/json",
@@ -176,7 +177,7 @@ export default class SwipePage extends Component {
                 //grab data from database then set state to re-render
                 // console.log('else')
 
-                let getres = await fetch(`${REACT_APP_BACKEND_URL}/category/${this.props.location.state.current_user_id}/${category_name}`, {
+                let getres = await fetch(`${BACKEND_URL}/category/${this.props.location.state.current_user_id}/${category_name}`, {
                     method: 'GET'
                 });
                 let getdata = await getres.json()
@@ -207,7 +208,7 @@ export default class SwipePage extends Component {
 
     async updateLiked(artist_id) {
         let raw = JSON.stringify({artist_id:artist_id});
-        let postres = await fetch(`${REACT_APP_BACKEND_URL}/patch-category-liked/${this.props.location.state.current_user_id}/${this.props.location.state.category_name}`, {
+        let postres = await fetch(`${BACKEND_URL}/patch-category-liked/${this.props.location.state.current_user_id}/${this.props.location.state.category_name}`, {
             method: 'POST',
             headers: {
                 "Accept": "application/json",
@@ -303,7 +304,7 @@ export default class SwipePage extends Component {
     async updateAfterLeaveScreen(visited, artists) {
         let visitedArr = Array.from(visited)
         let raw = JSON.stringify({visited: visitedArr, artists: artists});
-        let postres = await fetch(`${REACT_APP_BACKEND_URL}/patch-category-leave-screen/${this.props.location.state.current_user_id}/${this.props.location.state.category_name}`, {
+        let postres = await fetch(`${BACKEND_URL}/patch-category-leave-screen/${this.props.location.state.current_user_id}/${this.props.location.state.category_name}`, {
             method: 'POST',
             headers: {
                 "Accept": "application/json",
@@ -361,7 +362,7 @@ export default class SwipePage extends Component {
 
     render() {
         if (this.state.redirect) {
-            return <Redirect to='/login'/>
+            return <Navigate to='/login' replace />
         }
         return (
             <div className="swipePage">
@@ -378,3 +379,5 @@ export default class SwipePage extends Component {
         )
     }
 }
+
+export default withRouter(SwipePage);
