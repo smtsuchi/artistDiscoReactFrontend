@@ -9,7 +9,8 @@ import '../css/GenreSelect.css';
 
 const GenreSelect: React.FC = () => {
   const { currentUser, isAuthenticated, logout } = useAuth();
-  const { userId, categoryNames, settings, myPlaylist, addCategory, setCurrentPlaylist } = useUser();
+  const { userId, categoryNames, settings, myPlaylist, addCategory, setCurrentPlaylist,
+          profileStatus, profileError, loadProfile } = useUser();
   const navigate = useNavigate();
 
   const [options, setOptions] = useState<GenreOption[]>([]);
@@ -21,7 +22,13 @@ const GenreSelect: React.FC = () => {
   const [submitError, setSubmitError] = useState('');
 
   const loadOptions = async () => {
-    if (!userId) return;
+    // Without a user id there is nothing to ask for. Returning while
+    // loadingOptions stayed true is what left this stuck on "Reading your
+    // library…" forever when the profile hadn't loaded.
+    if (!userId) {
+      setLoadingOptions(false);
+      return;
+    }
     setLoadingOptions(true);
     setOptionsError('');
     try {
@@ -138,7 +145,17 @@ const GenreSelect: React.FC = () => {
       </div>
 
       <div className="genreForm">
-        {loadingOptions && <h3>Reading your library…</h3>}
+        {profileStatus === 'loading' && <h3>Loading your profile…</h3>}
+
+        {profileStatus === 'error' && (
+          <div className="genre-problem">
+            <h3>Couldn't load your profile.</h3>
+            <div className="auth-detail">{profileError}</div>
+            <button className="button" onClick={loadProfile}>Retry</button>
+          </div>
+        )}
+
+        {userId && loadingOptions && <h3>Reading your library…</h3>}
 
         {optionsError && (
           <div className="genre-problem">

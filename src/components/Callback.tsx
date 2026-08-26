@@ -1,121 +1,46 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Navigate } from 'react-router-dom';
-import Cookies from 'js-cookie';
 import { useAuth } from '../contexts/AuthContext';
 import { useUser } from '../contexts/UserContext';
-import { userApi } from '../services/api';
 
+/**
+ * Waiting room for the OAuth return trip.
+ *
+ * The profile load itself now lives in UserContext so it runs on every entry,
+ * not just this one. This component only reflects its progress — and it must
+ * wait for it: it previously rendered <Navigate> unconditionally on the first
+ * render, before the profile request had even started.
+ */
 const Callback: React.FC = () => {
-  const { token, setCurrentUser } = useAuth();
-  const { setUserData } = useUser();
-  const [loading, setLoading] = useState(true);
+  const { logout } = useAuth();
+  const { profileStatus, profileError, loadProfile } = useUser();
 
-  useEffect(() => {
-    const getCurrentUser = async () => {
-      try {
-        const res = await fetch('https://api.spotify.com/v1/me', {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer ' + Cookies.get('spotifyAuthToken'),
-          },
-        });
-        const data = await res.json();
-        setCurrentUser({
-          display_name: data.display_name,
-          id: data.id,
-          email: data.email,
-        });
-        return data;
-      } catch (error) {
-        console.error('Error getting current user:', error);
-        return null;
-      }
-    };
-
-    const getCurrentUserData = async () => {
-      const currentSpotifyUser = await getCurrentUser();
-      if (!currentSpotifyUser) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const result = await userApi.getUser(currentSpotifyUser.id);
-
-        if (result.success && result.data) {
-          // User exists in backend
-          setUserData({
-            userId: currentSpotifyUser.id,
-            displayName: currentSpotifyUser.display_name,
-            categoryNames: result.data.category_names,
-            settings: result.data.settings,
-            myPlaylist: result.data.my_playlist,
-          });
-        } else {
-          // Create new user profile
-          const playlistBody = JSON.stringify({
-            name: 'Curated by Artist Disco',
-            description:
-              'Your new playlist curated by Artist Disco! Every time you swipe right, your songs will be added here.',
-            public: true,
-          });
-
-          const playlistRes = await fetch(
-            `https://api.spotify.com/v1/users/${currentSpotifyUser.id}/playlists`,
-            {
-              method: 'POST',
-              headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                Authorization: 'Bearer ' + Cookies.get('spotifyAuthToken'),
-              },
-              body: playlistBody,
-            }
-          );
-          const playlistData = await playlistRes.json();
-
-          const createResult = await userApi.createUser(
-            currentSpotifyUser.id,
-            Cookies.get('spotifyAuthToken') || '',
-            playlistData.id
-          );
-
-          if (createResult.success && createResult.data) {
-            // The modernised backend returns the created user document as
-            // `data` itself; `data.createdUser` was the old Glitch shape and
-            // is undefined now, which crashed the new-user path.
-            setUserData({
-              userId: currentSpotifyUser.id,
-              displayName: currentSpotifyUser.display_name,
-              categoryNames: createResult.data.category_names,
-              settings: createResult.data.settings,
-              myPlaylist: playlistData.id,
-            });
-          } else {
-            console.error('Error creating user:', createResult.error);
-          }
-        }
-      } catch (error) {
-        console.error('Error getting user data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (token) {
-      getCurrentUserData();
-    } else {
-      setLoading(false);
-    }
-  }, [token]);
-
-  if (loading) {
-    return <div>Loading...</div>;
+  if (profileStatus === 'ready') {
+    return <Navigate to="/genreselect" replace />;
   }
 
-  return <Navigate to="/genreselect" replace />;
+  if (profileStatus === 'error') {
+    return (
+      <div className="media-container">
+        <div className="landing-page photo">
+          <div className="auth-status error">
+            Signed in to Spotify, but your profile could not be loaded.
+            <div className="auth-detail">{profileError}</div>
+          </div>
+          <button className="btn" onClick={loadProfile}>Try again</button>
+          <button className="btn" onClick={logout}>Sign out</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="media-container">
+      <div className="landing-page photo">
+        <div className="auth-status">Setting up your account…</div>
+      </div>
+    </div>
+  );
 };
 
 export default Callback;

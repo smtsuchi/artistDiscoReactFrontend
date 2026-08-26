@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { UserSettings } from '../types';
+import { useAuth } from './AuthContext';
+import { loadUserProfile } from '../services/profile';
 
 interface UserContextType {
   userId: string;
@@ -7,6 +9,10 @@ interface UserContextType {
   categoryNames: string[];
   settings: UserSettings;
   myPlaylist: string;
+  /** Loading the backend profile is separate from being signed in. */
+  profileStatus: 'idle' | 'loading' | 'ready' | 'error';
+  profileError: string;
+  loadProfile: () => void;
   setUserData: (data: {
     userId: string;
     displayName: string;
@@ -54,7 +60,14 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     add_to_playlist_on_like: true,
     follow_on_like: true,
     fav_on_like: true,
+    adventurousness: 0.5,
   });
+
+  const { currentUser } = useAuth();
+  const [profileStatus, setProfileStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
+    initialData?.userId ? 'ready' : 'idle'
+  );
+  const [profileError, setProfileError] = useState('');
 
   const setUserData = (data: {
     userId: string;
@@ -81,6 +94,28 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
       })
     );
   };
+
+  const loadProfile = useCallback(async () => {
+    if (!currentUser) return;
+    setProfileStatus('loading');
+    setProfileError('');
+    try {
+      const profile = await loadUserProfile(currentUser);
+      setUserData(profile);
+      setProfileStatus('ready');
+    } catch (err) {
+      console.error('Error loading profile:', err);
+      setProfileError(err instanceof Error ? err.message : 'Could not load your profile.');
+      setProfileStatus('error');
+    }
+  }, [currentUser]);
+
+  // Bootstrap on boot rather than only after an OAuth redirect.
+  useEffect(() => {
+    if (currentUser && !userId && profileStatus === 'idle') {
+      loadProfile();
+    }
+  }, [currentUser, userId, profileStatus, loadProfile]);
 
   const persistToLocalStorage = () => {
     localStorage.setItem(
@@ -142,6 +177,9 @@ export const UserProvider: React.FC<UserProviderProps> = ({ children }) => {
     categoryNames,
     settings,
     myPlaylist,
+    profileStatus,
+    profileError,
+    loadProfile,
     setUserData,
     updateSettings,
     addCategory,
