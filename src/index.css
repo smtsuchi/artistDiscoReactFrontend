@@ -1,3 +1,11 @@
+:root {
+  /* Single source of truth for the header's height. The route views sit below
+     the header inside a 100vh .App, so each one has to subtract this — using
+     100% made every card exactly one header taller than the space available,
+     pushing its bottom row off-screen on mobile. */
+  --header-height: 10vh;
+}
+
 * {
   margin: 0;
 }

@@ -10,7 +10,8 @@
         '.  submit      submit      .'
         '.  loggedin    loggedin  .'
         '.  .           .           .';
-    height: 100%;
+    /* Sits below the header inside a 100vh .App — see --header-height. */
+    height: calc(100vh - var(--header-height));
     background-color: rgb(34,34,34);
     border-radius: 20px;
 }

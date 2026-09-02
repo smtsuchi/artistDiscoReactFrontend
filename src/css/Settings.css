@@ -23,7 +23,9 @@ h3 {
     display: grid;
     background-color: rgb(34,34,34);
     border-radius: 20px;
-    height: 100%;
+    /* Not 100%: that resolves to the full 100vh of .App, but this sits below
+       the header, so the last row fell off the bottom of the screen. */
+    height: calc(100vh - var(--header-height));
     width: 100%;
 }
 @media screen and (min-width: 1025px) {

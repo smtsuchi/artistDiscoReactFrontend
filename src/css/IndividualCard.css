@@ -18,7 +18,8 @@
     display: grid;
     background-color: rgb(34,34,34);
     border-radius: 20px;
-    height: 100%;
+    /* Sits below the header inside a 100vh .App — see --header-height. */
+    height: calc(100vh - var(--header-height));
     width: 100%;
 }
 @media screen and (min-width: 1025px) {

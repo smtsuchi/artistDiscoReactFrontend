@@ -2,8 +2,8 @@
     display: grid;
     margin-left: 1%;
     grid-template-columns: 21.5% 21.5% 21.5% 21.5%;
-    height: 10vh;
-    max-height: 10vh;
+    height: var(--header-height);
+    max-height: var(--header-height);
     grid-template-areas: 'top1 top2 top3 top4';
     grid-gap: 4%;
     object-fit: scale-down;
